@@ -314,3 +314,57 @@ body {
         margin-right: 0;
     }
 }
+
+.loading_signal {
+    position: relative;
+
+    width: 505px;
+    height: 255px;
+
+    margin-top: 26px;
+
+    background-color: #ffffff;
+
+    border: 2px solid #cfcfcf;
+    border-radius: 28px;
+
+    /* Cái này giữ ảnh không chạy ra ngoài khung */
+    overflow: hidden;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.signal_track {
+    position: absolute;
+    top: 0;
+    left: 0;
+
+    height: 100%;
+    width: 200%;
+
+    display: flex;
+
+    animation: signalMove 8s linear infinite;
+}
+
+.signal_track img {
+    width: 50%;
+    height: 100%;
+
+    object-fit: cover;
+    object-position: center;
+
+    flex-shrink: 0;
+}
+@keyframes signalMove {
+    from {
+        transform: translateX(-50%);
+    }
+
+    to {
+        transform: translateX(0);
+    }
+}
+
