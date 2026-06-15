@@ -14,9 +14,10 @@ from scipy import io as sio, signal as sci_signal
 from torchvision import transforms, models
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from pydantic import BaseModel
  
-from database   import get_db, engine, Base
-from models_db  import PredictionJob, StftImage, JobStatus
+from csdl import get_db, engine, Base
+from models_db import prediction, stft_image, job_status
 
 drone_names = ["Phantom 4", "Mavic Zoom", "Mavic Enterprise"]
 upload_dir = os.getenv("upload_dir", "upload")
@@ -26,6 +27,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 bin_threshold = float(os.getenv("BIN_THRESHOLD", "0.5"))
 sim_threshold = float(os.getenv("TYPE_THRESHOLD", "0.75"))
 fq_threshold = float(os.getenv("FQ_THRESHOLD", "0.1"))
+min_type_freq = float(os.getenv("MIN_TYPE_FREQ", "0.05"))
 embedding_size = int(os.getenv("embedding_size", "128"))
 min_drone_frames = float(os.getenv("min_drone_frames",  "0.05"))
 Fs = 150e6
@@ -280,3 +282,194 @@ def aggregate(results: List[dict]) ->dict:
         "type_detail": type_detail,
         "has_unknown": has_unknown,
     }
+
+class resultPredict(BaseModel):
+    id: int
+    drone_detected: bool #co/ko drone
+    drone_types: List[str] #tra ve loai drone ma he thong nhan dang dua ra kqua
+    has_unknown: bool #co nam trong ds drone co trong db ko?
+    avg_binary_score: float #dua ra xs ty le co drone/ko drone
+    drone_frame_ratio: float #ty le anh duoc nhan la drone
+    drone_segments: int #so luong anh co drone
+    total_segments: int # tong so luong anh cua 1 fle .mat
+    type_detail: dict 
+    process_time_ms: int #thoi gian xu ly 1 file .mat trong khoang x ms
+
+class listHistory(BaseModel):
+    id: int
+    filename: str
+    status: str
+    drone_bin: Optional[bool]
+    confidence: Optional[bool]
+    drone_type: Optional[list]
+    total_images: Optional[int]
+    created_at: str
+
+@app.get("/health") #check system co hoat dong khong
+def health():
+    return {
+        "status": "he thong chay on",
+        "device": str(device),
+        "model_loaded": _model is not None,
+        "centroids_loaded": len(_centroids) if _centroids else 0,
+        "thresholds": {
+            "bin": bin_threshold,
+            "sim": sim_threshold,
+            "fq": fq_threshold,
+            "min_type_freq": min_type_freq,
+        },
+    }
+
+@app.post("/predict/mat", response_model= resultPredict)
+async def predict_from_mat (
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    if not file.filename.lower().endswith(".mat"):
+        raise HTTPException(406, "System just accept file .mat")
+    mat_bytes = await file.read()
+    if not mat_bytes:
+        raise HTTPException(400, "System can't found in4")
+    job = prediction(filename = file.filename, status = job_status.processing)
+    db.add(job)
+    await db.flush()
+    t0 = time.monotonic()
+    
+    try:
+        images = preprocessing(mat_bytes)
+        if not images:
+            raise ValueError(f"Signal too short, need >= {} samples")
+        
+        seg_results = thuc_thi(images)
+        db.add_all([
+            stft_image(
+                predict_id = job.id,
+                segment_idx = idx,
+                pre_bin = r["binary_score"],
+                pre_phantom = r["type_scores"][0],
+                pre_mavic_zoom = r["type_scores"][1],
+                pre_mavic_enterprise = r["type_scores"][2],
+                drone_bin = r["is_drone"],
+            )
+            for idx, r in enumerate(seg_results)
+        ])
+
+        agg = aggregate(seg_results)
+        elapsed_ms = int((time.monotonic()- t0)*1000)
+
+        job.status = job_status.done 
+        job.drone_bin = agg["drone_detected"] #bool #float
+        job.confidence = agg["avg_binary_score"] #float
+        job.drone_type = agg["drone_types"] #JSON array
+        job.drone_type_score = agg["type_detail"] #JSON object
+        job.total_images = agg["total_segments"] #int
+        job.processing_time = elapsed_ms #int
+
+        return resultPredict (
+            id = job.id,
+            drone_detected= agg ["drone_detected"],
+            drone_types= agg["drone_types"],
+            has_unknown= agg["has_unknown"],
+            avg_binary_score= agg["avg_binary_score"],
+            drone_frame_ratio= agg["drone_frame_ratio"],
+            drone_segments= agg["drone_segments"],
+            total_segments= agg["total_segments"],
+            type_detail= agg["type_detail"],
+            process_time_ms= elapsed_ms,
+        )
+    except Exception as e:
+        job.status = job_status.error
+        raise HTTPException(500, f"Lỗi xử lý phía nội bộ của server {e}")
+
+@app.get("/jobs", response_model = List[listHistory])
+async def list_jobs (
+    limit: int = 20,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+):
+    rows = (await db.execute(
+        select(prediction).order_by(prediction.created_at.desc()).limit(limit).offset(offset)
+    )).scalar().all()
+
+    return [
+        listHistory(
+            id = r.id,
+            filename= r.filename,
+            status= r.status,
+            drone_bin= r.drone_bin,
+            confidence= r.confidence,
+            drone_type= r.drone_type,
+            total_images= r.total_images,
+            created_at= r.created_at.isoformat(),
+        )
+        for r in rows
+    ]
+
+@app.get("/jobs/{job_id}", summary= "Thong tin chi tiet cua 1 lan predict")
+async def get_job(job_id: int, db: AsyncSession = Depends(get_db)):
+    job = await db.get(prediction, job_id)
+    if not job:
+        raise HTTPException(404, "Ban ghi khong ton tai")
+    return {
+        "id": job.id,
+        "filename": job.filename,
+        "status": job.status.value,
+        "drone_bin": job.drone_bin,
+        "confidence":       job.confidence,
+        "drone_type":       job.drone_type,
+        "drone_type_score": job.drone_type_score,
+        "total_images":     job.total_images,
+        "processing_time":  job.processing_time,
+        "created_at":       job.created_at.isoformat(),
+        "updated_at":       job.updated_at.isoformat() if job.updated_at else None,
+    }
+
+@app.get("/jobs/{job_id}/segments", summary= "Raw scores tung doan")
+async def get_segments(
+    job_id: int,
+    limit: int = 200,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+):
+    job = await db.get(prediction, job_id)
+    if not job:
+        raise HTTPException(404, "Ban ghi khong ton tai")
+    rows = (await db.execute(
+        select(stft_image).where(stft_image.predict_id == job_id).order_by(stft_image.segment_index).limit(limit).offset(offset)
+    )).scalars().all()
+    return {
+        "job_id":         job_id,
+        "total_segments": job.total_images,
+        "segments": [
+            {
+                "segment_idx" = idx,
+                "pre_bin" = r.pre_bin,
+                "pre_phantom" = r.pre_phantom,
+                "pre_mavic_zoom" = r.pre_mavic_zoom,
+                "pre_mavic_enterprise" = r.pre_mavic_enterprise,
+                "drone_bin" = r.drone_bin,
+            }
+            for r in rows
+        ],
+    }
+
+#Admin tai weight
+@app.post("/admin/upload-model", summary= "upload model.pth moi")
+async def upload_model(file: UploadFile= File(...)):
+    global _model
+    os.makedirs(upload_dir, exist_ok= True)
+    data = await file.read()
+    with open(model_path, "wb")as f:
+        f.write(data)
+    _model = None
+    return {"message": f"Saved -> {model_path}", "size_mb": round(len(data) / 1024**2, 2)}
+
+@app.post("/admin/upload-centroids", summary="Upload centroids.pth mới")
+async def upload_centroids(file: UploadFile = File(...)):
+    global _centroids
+    os.makedirs(upload_dir, exist_ok=True)
+    data = await file.read()
+    with open(centroids_path, "wb") as f:
+        f.write(data)
+    _centroids = None   # lazy reload
+    return {"message": f"Saved → {centroids_path}", "size_mb": round(len(data) / 1024**2, 2)}

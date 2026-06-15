@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SDrone - Home</title>
+
+    <link rel="stylesheet" href="home.css">
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <header class="tool_bar">
+        <div class="logo">
+            <img src="logo.png" alt="SDrone Logo" class="logo_img">
+            <span>SDrone</span>
+        </div>
+
+        <nav class="nav_link">
+            <ul>
+                <li><a href="home.html" class="active">Home</a></li>
+                <li><a href="classify.html">Detection</a></li>
+                <li><a href="#">High Mode</a></li>
+                <li><a href="#">News</a></li>
+            </ul>
+        </nav>
+
+        <div class="contact_us">
+            <a href="#" class="btn-contact">Contact us</a>
+        </div>
+    </header>
+
+    <main class="main_home">
+        <section class="home_banner">
+            <img src="background_home.jpg" alt="Home Drone Background" class="bg_home">
+
+            <div class="banner_overlay"></div>
+
+            <div class="home_text">
+                <h1 class="main_title">Welcome to SDrone</h1>
+                <p class="sub_title">Trang web này hỗ trợ việc phát hiện drone</p>
+            </div>
+
+            <div class="white_card">
+                <div class="detect_type">
+                    <h3 class="detect_title">Detect</h3>
+
+                    <div class="detect_option">
+                        <a href="classify.html" class="detect_item">
+                            <div class="icon">
+                                <img src="sound.png" alt="Sound Icon">
+                            </div>
+                            <span>Acoustic</span>
+                        </a>
+
+                        <a href="classify.html" class="detect_item">
+                            <div class="icon">
+                                <img src="rf.png" alt="RF Icon">
+                            </div>
+                            <span>RF</span>
+                        </a>
+
+                        <a href="classify.html" class="detect_item">
+                            <div class="icon">
+                                <img src="picture.png" alt="Picture Icon">
+                            </div>
+                            <span>Picture</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>
