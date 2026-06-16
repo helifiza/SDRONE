@@ -6,7 +6,7 @@ _url = os.getenv(
     "DATABASE_URL",
     "mysql+aiomysql://{user}:{password}@{host}:{port}/{db}".format(
         user = os.getenv("DB_USER", "root"),
-        password = os.getenv("DB_PASSWORD", "password"),
+        password = os.getenv("DB_PASSWORD", "123456"),
         host = os.getenv("DB_HOST", "localhost"),
         port = os.getenv("DB_PORT", "3306"),
         db = os.getenv("DB_NAME", "sdrone_db"),

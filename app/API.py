@@ -2,12 +2,11 @@ import timm
 import io, os, time
 import numpy as np
 import torch, torch.nn as nn
-import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 import torch.nn.functional as F
  
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from typing import List, Optional, Dict
 from PIL import Image
 from scipy import io as sio, signal as sci_signal
@@ -16,8 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
  
-from csdl import get_db, engine, Base
-from models_db import prediction, stft_image, job_status
+from app.csdl import get_db, engine, Base
+from app.model_db import Prediction, stft_image, job_status
 
 drone_names = ["Phantom 4", "Mavic Zoom", "Mavic Enterprise"]
 upload_dir = os.getenv("upload_dir", "upload")
@@ -114,7 +113,7 @@ def preprocessing(mat_bytes: bytes) -> List[Image.Image]:
         raise ValueError(f"không tìm thấy key '{mat_key}' trong file {available}")
     
     signal_data = mat_data[mat_key].squeeze()
-    colormap = cm.get_cmap('jet')
+    colormap = plt.get_cmap('jet')
     images = []
 
     segments = []
@@ -226,7 +225,7 @@ def aggregate(results: List[dict]) ->dict:
             "drone_frame_ratio": 0.0,
             "drone_segments": 0,
             "total_segments": 0,
-            "final_types": [],
+            "drone_types": [],
             "type_detail": {},
             "has_unknown": False,
         }
@@ -242,7 +241,7 @@ def aggregate(results: List[dict]) ->dict:
             "drone_frame_ratio": round(drone_pct, 4),
             "drone_segments": n_drone,
             "total_segments": total,
-            "final_types": [],
+            "drone_types": [],
             "type_detail": {},
             "has_unknown": False,
         }
@@ -278,7 +277,7 @@ def aggregate(results: List[dict]) ->dict:
         "drone_frame_ratio": round(drone_pct, 4),
         "drone_segments": n_drone,
         "total_segments": total,
-        "final_types": final_types,
+        "drone_types": final_types,
         "type_detail": type_detail,
         "has_unknown": has_unknown,
     }
@@ -300,7 +299,7 @@ class listHistory(BaseModel):
     filename: str
     status: str
     drone_bin: Optional[bool]
-    confidence: Optional[bool]
+    confidence: Optional[float]
     drone_type: Optional[list]
     total_images: Optional[int]
     created_at: str
@@ -330,7 +329,7 @@ async def predict_from_mat (
     mat_bytes = await file.read()
     if not mat_bytes:
         raise HTTPException(400, "System can't found in4")
-    job = prediction(filename = file.filename, status = job_status.processing)
+    job = Prediction(filename = file.filename, status = job_status.processing)
     db.add(job)
     await db.flush()
     t0 = time.monotonic()
@@ -338,13 +337,13 @@ async def predict_from_mat (
     try:
         images = preprocessing(mat_bytes)
         if not images:
-            raise ValueError(f"Signal too short, need >= {} samples")
+            raise ValueError(f"Signal too short, need >= {segment_length} samples")
         
         seg_results = thuc_thi(images)
         db.add_all([
             stft_image(
                 predict_id = job.id,
-                segment_idx = idx,
+                segment_index = idx,
                 pre_bin = r["binary_score"],
                 pre_phantom = r["type_scores"][0],
                 pre_mavic_zoom = r["type_scores"][1],
@@ -388,8 +387,8 @@ async def list_jobs (
     db: AsyncSession = Depends(get_db),
 ):
     rows = (await db.execute(
-        select(prediction).order_by(prediction.created_at.desc()).limit(limit).offset(offset)
-    )).scalar().all()
+        select(Prediction).order_by(Prediction.created_at.desc()).limit(limit).offset(offset)
+    )).scalars().all()
 
     return [
         listHistory(
@@ -407,7 +406,7 @@ async def list_jobs (
 
 @app.get("/jobs/{job_id}", summary= "Thong tin chi tiet cua 1 lan predict")
 async def get_job(job_id: int, db: AsyncSession = Depends(get_db)):
-    job = await db.get(prediction, job_id)
+    job = await db.get(Prediction, job_id)
     if not job:
         raise HTTPException(404, "Ban ghi khong ton tai")
     return {
@@ -431,7 +430,7 @@ async def get_segments(
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
-    job = await db.get(prediction, job_id)
+    job = await db.get(Prediction, job_id)
     if not job:
         raise HTTPException(404, "Ban ghi khong ton tai")
     rows = (await db.execute(
@@ -442,12 +441,12 @@ async def get_segments(
         "total_segments": job.total_images,
         "segments": [
             {
-                "segment_idx" = idx,
-                "pre_bin" = r.pre_bin,
-                "pre_phantom" = r.pre_phantom,
-                "pre_mavic_zoom" = r.pre_mavic_zoom,
-                "pre_mavic_enterprise" = r.pre_mavic_enterprise,
-                "drone_bin" = r.drone_bin,
+                "segment_index" : r.segment_index,
+                "pre_bin" : r.pre_bin,
+                "pre_phantom" : r.pre_phantom,
+                "pre_mavic_zoom" : r.pre_mavic_zoom,
+                "pre_mavic_enterprise" : r.pre_mavic_enterprise,
+                "drone_bin" : r.drone_bin,
             }
             for r in rows
         ],
