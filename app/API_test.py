@@ -20,7 +20,7 @@ from app.model_db import Prediction, stft_image, job_status
 # ── Cấu hình ──────────────────────────────────────────────────────────────
 drone_names    = ["Phantom 4", "Mavic Zoom", "Mavic Enterprise"]
 upload_dir     = os.getenv("upload_dir", "upload")
-model_path     = os.path.join(upload_dir, os.getenv("model_file", "model_.pth"))
+model_path     = os.path.join(upload_dir, os.getenv("model_file", "model_.pth"))#model_.pth là model overlap =128, model.pth overlap =1024
 device         = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 bin_threshold  = float(os.getenv("BIN_THRESHOLD",  "0.5"))  # có drone hay không
