@@ -81,7 +81,6 @@ uploadBtn.addEventListener("click", async () => {
 });
 
 function renderResult(d) {
-    // Ẩn loading_signal, hiện result
     loadingSignal.style.display = "none";
     result.style.display = "block";
     result.innerHTML = "";
@@ -109,23 +108,30 @@ function renderResult(d) {
     title.innerHTML = "&#128680; Hệ thống phát hiện có drone";
     card.appendChild(title);
 
-    const entries  = Object.entries(d.type_detail).filter(function(e) { return e[0] !== "Unknown"; });
-    const showList = entries.length > 0 ? entries : [["Unknown", { frequency: 1 }]];
+    //lấy kết quả drone_type(kết quả dự đoán cuối cùng) hiển thị ra cho user
+    const showList = d.drone_types.length > 0
+        ? d.drone_types.map(function(type) {
+            return {
+                name: type,
+                frequency: d.type_detail[type] ? d.type_detail[type].frequency : null,
+            };
+          })
+        : [{ name: "Unknown", frequency: null }];
 
-    showList.forEach(function(entry) {
-        const type = entry[0];
-        const pct  = (entry[1].frequency * 100).toFixed(1) + "%";
-
+    showList.forEach(function(item) {
         const row = document.createElement("div");
         row.className = "drone-row";
 
         const nameBox = document.createElement("div");
         nameBox.className = "drone-name";
-        nameBox.textContent = type;
+        nameBox.textContent = item.name;
 
         const pctBox = document.createElement("div");
         pctBox.className = "drone-pct";
-        pctBox.textContent = pct;
+        // nếu là Unknown hoặc không có frequency thì không hiện %
+        pctBox.textContent = item.frequency !== null
+            ? (item.frequency * 100).toFixed(1) + "%"
+            : "";
 
         row.appendChild(nameBox);
         row.appendChild(pctBox);

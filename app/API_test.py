@@ -20,13 +20,13 @@ from app.model_db import Prediction, stft_image, job_status
 # ── Cấu hình ──────────────────────────────────────────────────────────────
 drone_names    = ["Phantom 4", "Mavic Zoom", "Mavic Enterprise"]
 upload_dir     = os.getenv("upload_dir", "upload")
-model_path     = os.path.join(upload_dir, os.getenv("model_file", "model_.pth"))#model_.pth là model overlap =128, model.pth overlap =1024
+model_path     = os.path.join(upload_dir, os.getenv("model_file", "model_.pth"))#model_.pth là model overlap =128, model.pth overlap =1024, model_512: overlap = 512
 device         = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 bin_threshold  = float(os.getenv("BIN_THRESHOLD",  "0.5"))  # có drone hay không
 type_threshold = float(os.getenv("TYPE_THRESHOLD", "0.5"))  # ngưỡng từng loại
 fq_threshold   = float(os.getenv("FQ_THRESHOLD",   "0.1"))  # tỉ lệ frame tối thiểu
-min_type_freq  = float(os.getenv("MIN_TYPE_FREQ",  "0.075")) # tần suất tối thiểu để báo 1 loại
+min_type_freq  = float(os.getenv("MIN_TYPE_FREQ",  "0.2")) # tần suất tối thiểu để báo 1 loại
 embedding_size = int(os.getenv("embedding_size",   "128"))
 
 Fs             = 150e6
