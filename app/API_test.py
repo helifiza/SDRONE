@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from app.csdl import get_db
 from app.model_db import Prediction, stft_image, job_status
 
-# ── Cấu hình ──────────────────────────────────────────────────────────────
+#Cấu hình
 drone_names    = ["Phantom 4", "Mavic Zoom", "Mavic Enterprise"]
 upload_dir     = os.getenv("upload_dir", "upload")
 model_path     = os.path.join(upload_dir, os.getenv("model_file", "model_.pth"))#model_.pth là model overlap =128, model.pth overlap =1024, model_512: overlap = 512
@@ -37,7 +37,7 @@ overlap        = 128
 batch_size     = 20
 mat_key        = os.getenv("MAT_KEY", "Y")
 
-# ── FastAPI ────────────────────────────────────────────────────────────────
+#FastAPI
 app = FastAPI(
     title="SDrone API",
     description="Upload file .mat -> Process -> save MySQL",
@@ -48,7 +48,7 @@ app.add_middleware(
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
 
-# ── Model ──────────────────────────────────────────────────────────────────
+#Model
 class DroneClass(nn.Module):
     def __init__(self, num_drone_types: int = 3, embedding_size: int = 128):
         super().__init__()
@@ -96,7 +96,7 @@ transform = transforms.Compose([
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
 ])
 
-# ── Pydantic schemas ───────────────────────────────────────────────────────
+#Pydantic schemas
 class resultPredict(BaseModel):
     id:                int
     drone_detected:    bool
@@ -119,11 +119,9 @@ class listHistory(BaseModel):
     total_images: Optional[int]
     created_at:   str
 
-# ── Tiền xử lý ────────────────────────────────────────────────────────────
+#Tiền xử lý
 def preprocessing(mat_bytes: bytes) -> List[Image.Image]:
-    """
-    Đọc file .mat, lấy 1 tín hiệu 1D, cắt thành các segment,
-    STFT từng segment → trả về list ảnh PIL.
+    """Đọc file .mat, lấy 1 tín hiệu 1D, cắt thành các segment,STFT từng segment -> trả về list ảnh PIL.
     """
     buf = io.BytesIO(mat_bytes)
     try:
@@ -167,13 +165,13 @@ def preprocessing(mat_bytes: bytes) -> List[Image.Image]:
 
     return images
 
-# ── Inference ──────────────────────────────────────────────────────────────
+#Inference
 def thuc_thi(images: List[Image.Image]) -> List[dict]:
     """
     Chạy model trên từng frame:
-      - bin_score < bin_threshold  → không có drone
-      - bin_score >= bin_threshold → loại nào > type_threshold thì dương tính
-                                     không loại nào vượt ngưỡng → "Unknown"
+      bin_score < bin_threshold  ->không có drone
+      bin_score >= bin_threshold ->loại nào -> type_threshold thì dương tính
+                                     không loại nào vượt ngưỡng -> "Unknown"
     """
     model = get_model()
     all_bin, all_type = [], []
@@ -213,7 +211,7 @@ def thuc_thi(images: List[Image.Image]) -> List[dict]:
 
     return results
 
-# ── Aggregate ──────────────────────────────────────────────────────────────
+# Aggregate
 def aggregate(results: List[dict]) -> dict:
     from collections import Counter
 
@@ -278,7 +276,7 @@ def aggregate(results: List[dict]) -> dict:
         "has_unknown":       has_unknown,
     }
 
-# ── Endpoints ──────────────────────────────────────────────────────────────
+# Endpoints
 @app.get("/health")
 def health():
     return {
